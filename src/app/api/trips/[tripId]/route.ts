@@ -44,9 +44,6 @@ interface PortalTripDetailRow {
   vehicle_model: string | null;
   vehicle_body_type: string | null;
 
-  driver_name: string | null;
-  driver_type: string | null;
-
   last_driver_lat: number | string | null;
   last_driver_lng: number | string | null;
   last_tracking_update_at: string | null;
@@ -143,10 +140,6 @@ function normalize(rpc: RpcResult) {
       make: t.vehicle_make,
       model: t.vehicle_model,
       bodyType: t.vehicle_body_type,
-    },
-    driver: {
-      name: t.driver_name,
-      type: t.driver_type,
     },
 
     tracking: {

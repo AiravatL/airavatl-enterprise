@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
-import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from "react-leaflet";
+import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -15,9 +14,37 @@ interface Props {
   className?: string;
 }
 
-const PICKUP_ICON = createIcon("#16a34a"); // emerald
-const DELIVERY_ICON = createIcon("#dc2626"); // red
-const DRIVER_ICON = createIcon("#4c1d95"); // brand violet
+const PICKUP_ICON = L.divIcon({
+  html:
+    '<div style="width:14px;height:14px;border-radius:50%;background:#10b981;' +
+    'border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3)"></div>',
+  className: "",
+  iconSize: [14, 14],
+  iconAnchor: [7, 7],
+});
+
+const DELIVERY_ICON = L.divIcon({
+  html:
+    '<div style="width:14px;height:14px;border-radius:50%;background:#ef4444;' +
+    'border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3)"></div>',
+  className: "",
+  iconSize: [14, 14],
+  iconAnchor: [7, 7],
+});
+
+const DRIVER_ICON = L.divIcon({
+  html:
+    '<div style="width:32px;height:32px;border-radius:50%;background:#2563eb;' +
+    'border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.3);' +
+    'display:flex;align-items:center;justify-content:center">' +
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M5 17H3a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H20a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/>' +
+    '<circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>' +
+    "</div>",
+  className: "",
+  iconSize: [32, 32],
+  iconAnchor: [16, 16],
+});
 
 export function LiveTrackingMap({
   pickup,
@@ -26,120 +53,117 @@ export function LiveTrackingMap({
   routePolyline,
   className,
 }: Props) {
-  const points = useMemo(
-    () =>
-      [
-        pickup.lat != null && pickup.lng != null ? ([pickup.lat, pickup.lng] as [number, number]) : null,
-        delivery.lat != null && delivery.lng != null
-          ? ([delivery.lat, delivery.lng] as [number, number])
-          : null,
-        driver.lat != null && driver.lng != null ? ([driver.lat, driver.lng] as [number, number]) : null,
-      ].filter(Boolean) as Array<[number, number]>,
-    [pickup.lat, pickup.lng, delivery.lat, delivery.lng, driver.lat, driver.lng],
-  );
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<L.Map | null>(null);
+  const driverMarkerRef = useRef<L.Marker | null>(null);
 
-  const decoded = useMemo(() => decodePolyline(routePolyline), [routePolyline]);
+  // Initialize once. Pickup/delivery don't change for a trip, so they stay set.
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
+    if (
+      pickup.lat == null ||
+      pickup.lng == null ||
+      delivery.lat == null ||
+      delivery.lng == null
+    ) {
+      return;
+    }
 
-  const center =
-    points[0] ?? ([20.5937, 78.9629] as [number, number]); // India fallback
-  const zoom = points.length > 1 ? 8 : 12;
+    const map = L.map(containerRef.current, {
+      zoomControl: false,
+      attributionControl: false,
+    });
 
-  if (points.length === 0) {
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 18,
+    }).addTo(map);
+
+    L.control.zoom({ position: "topright" }).addTo(map);
+
+    L.marker([pickup.lat, pickup.lng], { icon: PICKUP_ICON })
+      .addTo(map)
+      .bindTooltip("Pickup", { direction: "top", offset: [0, -8] });
+
+    L.marker([delivery.lat, delivery.lng], { icon: DELIVERY_ICON })
+      .addTo(map)
+      .bindTooltip("Delivery", { direction: "top", offset: [0, -8] });
+
+    const decoded = decodePolyline(routePolyline);
+    if (decoded.length > 1) {
+      L.polyline(decoded, { color: "#4c1d95", weight: 3.5, opacity: 0.55 }).addTo(map);
+    } else {
+      L.polyline(
+        [
+          [pickup.lat, pickup.lng],
+          [delivery.lat, delivery.lng],
+        ],
+        { color: "#6366f1", weight: 3, opacity: 0.5, dashArray: "8 6" },
+      ).addTo(map);
+    }
+
+    const bounds = L.latLngBounds([
+      [pickup.lat, pickup.lng],
+      [delivery.lat, delivery.lng],
+    ]);
+    if (driver.lat != null && driver.lng != null) {
+      bounds.extend([driver.lat, driver.lng]);
+    }
+    map.fitBounds(bounds, { padding: [40, 40] });
+
+    mapRef.current = map;
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      driverMarkerRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Move driver marker as new locations arrive — no re-init.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (driver.lat == null || driver.lng == null) return;
+
+    if (driverMarkerRef.current) {
+      driverMarkerRef.current.setLatLng([driver.lat, driver.lng]);
+    } else {
+      driverMarkerRef.current = L.marker([driver.lat, driver.lng], { icon: DRIVER_ICON })
+        .addTo(map)
+        .bindTooltip("Driver", { direction: "top", offset: [0, -18] });
+    }
+  }, [driver.lat, driver.lng]);
+
+  if (
+    pickup.lat == null ||
+    pickup.lng == null ||
+    delivery.lat == null ||
+    delivery.lng == null
+  ) {
     return (
       <div
-        className={`flex items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50 text-sm text-muted-foreground ${className ?? "h-72"}`}
+        className={`flex items-center justify-center rounded-xl border border-dashed border-gray-200 bg-gray-50 text-sm text-muted-foreground ${className ?? "h-full"}`}
       >
-        Tracking will appear once the driver shares their location.
+        Tracking will appear once the trip is on the road.
       </div>
     );
   }
 
   return (
-    <div className={`overflow-hidden rounded-xl border border-gray-200 ${className ?? "h-72"}`}>
-      <MapContainer
-        center={center}
-        zoom={zoom}
-        scrollWheelZoom={false}
-        className="h-full w-full"
-        style={{ background: "#f1f5f9" }}
-      >
-        <TileLayer
-          attribution='© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
-
-        {pickup.lat != null && pickup.lng != null ? (
-          <Marker position={[pickup.lat, pickup.lng]} icon={PICKUP_ICON}>
-            <Popup>Pickup</Popup>
-          </Marker>
-        ) : null}
-
-        {delivery.lat != null && delivery.lng != null ? (
-          <Marker position={[delivery.lat, delivery.lng]} icon={DELIVERY_ICON}>
-            <Popup>Delivery</Popup>
-          </Marker>
-        ) : null}
-
-        {driver.lat != null && driver.lng != null ? (
-          <Marker position={[driver.lat, driver.lng]} icon={DRIVER_ICON}>
-            <Popup>Driver</Popup>
-          </Marker>
-        ) : null}
-
-        {decoded.length > 1 ? (
-          <Polyline positions={decoded} pathOptions={{ color: "#4c1d95", weight: 4, opacity: 0.6 }} />
-        ) : points.length >= 2 ? (
-          <Polyline
-            positions={points.slice(0, 2)}
-            pathOptions={{ color: "#9ca3af", weight: 2, dashArray: "6 8" }}
-          />
-        ) : null}
-
-        <FitBounds points={points} />
-      </MapContainer>
-    </div>
+    <div
+      ref={containerRef}
+      className={className}
+      style={{
+        position: "relative",
+        zIndex: 0,
+        width: "100%",
+        minHeight: 280,
+        borderRadius: 12,
+        overflow: "hidden",
+      }}
+    />
   );
-}
-
-function FitBounds({ points }: { points: Array<[number, number]> }) {
-  const map = useMap();
-  const lastFitKey = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (points.length === 0) return;
-    const key = points.map((p) => p.join(",")).join("|");
-    if (lastFitKey.current === key) return;
-    lastFitKey.current = key;
-
-    if (points.length === 1) {
-      map.setView(points[0], Math.max(map.getZoom(), 12), { animate: true });
-      return;
-    }
-
-    const bounds = L.latLngBounds(points);
-    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
-  }, [map, points]);
-
-  return null;
-}
-
-function createIcon(colorHex: string): L.DivIcon {
-  // Inline SVG marker — avoids the default Leaflet sprite path issues in Next.js.
-  const html = `
-    <div style="position:relative;">
-      <svg xmlns="http://www.w3.org/2000/svg" width="32" height="40" viewBox="0 0 32 40">
-        <path d="M16 0C7.16 0 0 7.16 0 16c0 11 16 24 16 24s16-13 16-24C32 7.16 24.84 0 16 0z" fill="${colorHex}"/>
-        <circle cx="16" cy="16" r="6" fill="white"/>
-      </svg>
-    </div>
-  `;
-  return L.divIcon({
-    html,
-    className: "portal-marker",
-    iconSize: [32, 40],
-    iconAnchor: [16, 40],
-    popupAnchor: [0, -36],
-  });
 }
 
 // Google's encoded polyline format used in delivery_requests.route_polyline.

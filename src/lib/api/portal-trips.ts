@@ -94,10 +94,6 @@ export interface PortalTripDetail {
     model: string | null;
     bodyType: string | null;
   };
-  driver: {
-    name: string | null;
-    type: string | null;
-  };
 
   tracking: {
     lat: number | null;

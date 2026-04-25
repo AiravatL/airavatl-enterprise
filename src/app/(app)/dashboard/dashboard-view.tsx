@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { Activity, History, Truck } from "lucide-react";
+import { Activity, Truck } from "lucide-react";
 
 import {
   Card,
@@ -44,7 +44,7 @@ export function DashboardView({ firstName }: Props) {
       title={`Welcome${firstName ? `, ${firstName}` : ""}`}
       description="Your trips with AiravatL, all in one place."
     >
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <SummaryCard
           label="Active trips"
           value={formatCount(activeQuery.data?.total, activeQuery.isLoading)}
@@ -56,11 +56,6 @@ export function DashboardView({ firstName }: Props) {
           value={formatCount(historyQuery.data?.total, historyQuery.isLoading)}
           icon={<Truck className="size-4 text-emerald-600" />}
           href="/trip-history"
-        />
-        <SummaryCard
-          label="Last updated"
-          value={lastUpdatedLabel(activeQuery.dataUpdatedAt)}
-          icon={<History className="size-4 text-amber-600" />}
         />
       </div>
 
@@ -118,17 +113,4 @@ function SummaryCard({
 function formatCount(total: number | undefined, isLoading: boolean): string {
   if (total != null) return String(total);
   return isLoading ? "…" : "—";
-}
-
-function lastUpdatedLabel(timestamp: number): string {
-  if (!timestamp) return "—";
-  const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
-  if (seconds < 30) return "Just now";
-  if (seconds < 60) return `${seconds}s ago`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  return new Date(timestamp).toLocaleTimeString("en-IN", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 }
