@@ -22,6 +22,7 @@ import { SignedDocPreview } from "@/components/trip-detail/signed-doc-preview";
 import { getTrip, type PortalTripDetail, type TripStatus } from "@/lib/api/portal-trips";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import { tripStatusLabel } from "@/lib/format/trip-status";
+import { cn } from "@/lib/utils";
 import { PageShell } from "../../_components/page-shell";
 
 const HISTORY_STATUSES: TripStatus[] = ["completed", "cancelled", "driver_rejected"];
@@ -72,55 +73,56 @@ export function TripDetailView({ tripId }: Props) {
   const isBackgroundRefreshing = query.isFetching && !query.isLoading;
 
   return (
-    <div className="w-full px-4 py-4 sm:px-6 sm:py-5 space-y-3">
-      {/* Compact hero row */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2 min-w-0">
+    <div className="w-full space-y-3 px-3 py-3 sm:px-6 sm:py-5">
+      {/* Hero — stacks cleanly on mobile, single row on sm+ */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
           <Link
             href="/active-trips"
             className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="size-3.5" /> Back
           </Link>
-          <span className="text-gray-300">/</span>
-          <h1 className="text-lg font-bold tracking-tight text-gray-900">
+          <button
+            type="button"
+            onClick={() => void query.refetch()}
+            disabled={query.isFetching}
+            title={isBackgroundRefreshing ? "Updating…" : "Refresh"}
+            aria-label="Refresh"
+            className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-900"
+          >
+            <RefreshCw className={`size-3.5 ${isBackgroundRefreshing ? "animate-spin" : ""}`} />
+          </button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <h1 className="text-lg font-bold tracking-tight text-gray-900 sm:text-xl">
             {trip.tripNumber}
           </h1>
           <TripStatusBadge status={trip.status} />
-          <span className="ml-1 text-gray-300">·</span>
-          <span className="inline-flex items-center gap-1 text-xs text-gray-600">
-            <MapPin className="size-3 text-gray-400" />
+        </div>
+
+        <div className="flex items-center gap-1 text-xs text-gray-600">
+          <MapPin className="size-3 shrink-0 text-gray-400" />
+          <span className="truncate">
             <span className="font-medium">{trip.pickup.city ?? "—"}</span>
-            <span className="text-gray-400">→</span>
+            <span className="mx-1 text-gray-400">→</span>
             <span className="font-medium">{trip.delivery.city ?? "—"}</span>
             {trip.estimatedDistanceKm != null ? (
-              <span className="text-gray-400">· {Math.round(trip.estimatedDistanceKm)} km</span>
+              <span className="text-gray-400"> · {Math.round(trip.estimatedDistanceKm)} km</span>
             ) : null}
           </span>
         </div>
-        <button
-          type="button"
-          onClick={() => void query.refetch()}
-          disabled={query.isFetching}
-          title={isBackgroundRefreshing ? "Updating…" : "Refresh"}
-          aria-label="Refresh"
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-gray-200 bg-white text-gray-500 transition-colors hover:bg-gray-50 hover:text-gray-900"
-        >
-          <RefreshCw className={`size-3.5 ${isBackgroundRefreshing ? "animate-spin" : ""}`} />
-        </button>
       </div>
 
-      {/* Row 1: 12-col grid — Map (6) + Route (3) + Documents (3) */}
+      {/* Single 12-col grid. Mobile order: Map → Route → Timeline → Cargo & Vehicle → Documents.
+          Desktop order via lg:order-N: Map(1) Route(2) Documents(3) Cargo&Vehicle(4) Timeline(5). */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
-        <MapCard trip={trip} />
-        <RouteCard trip={trip} />
-        <DocumentsCard trip={trip} />
-      </div>
-
-      {/* Row 2: 12-col — Cargo & Vehicle (3) + Timeline (9) */}
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
-        <CargoVehicleCard trip={trip} />
-        <TimelineCard trip={trip} />
+        <MapCard trip={trip} className="order-1 lg:col-span-6 lg:order-1" />
+        <RouteCard trip={trip} className="order-2 lg:col-span-3 lg:order-2" />
+        <TimelineCard trip={trip} className="order-3 lg:col-span-9 lg:order-5" />
+        <CargoVehicleCard trip={trip} className="order-4 lg:col-span-3 lg:order-4" />
+        <DocumentsCard trip={trip} className="order-5 lg:col-span-3 lg:order-3" />
       </div>
     </div>
   );
@@ -137,16 +139,16 @@ function BackLink() {
   );
 }
 
-// ─── Map (col-span-6) ───────────────────────────────────────────────────────
-function MapCard({ trip }: { trip: PortalTripDetail }) {
+// ─── Map ────────────────────────────────────────────────────────────────────
+function MapCard({ trip, className }: { trip: PortalTripDetail; className?: string }) {
   const { pickup, delivery, tracking, routePolyline, status } = trip;
   const isHistory = HISTORY_STATUSES.includes(status);
   const hasLive = !!tracking.lastUpdatedAt && !isHistory;
 
   return (
-    <Card className="flex flex-col lg:col-span-6">
-      <CardContent className="flex flex-1 flex-col gap-2 p-3">
-        <div className="flex items-center justify-between">
+    <Card className={cn("flex flex-col", className)}>
+      <CardContent className="flex flex-1 flex-col gap-2 p-2.5 sm:p-3">
+        <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-700">
             <Navigation className="size-3.5 text-gray-500" />
             {hasLive ? "Live tracking" : "Trip route"}
@@ -167,11 +169,14 @@ function MapCard({ trip }: { trip: PortalTripDetail }) {
           delivery={{ lat: delivery.lat, lng: delivery.lng }}
           driver={{ lat: tracking.lat, lng: tracking.lng }}
           routePolyline={routePolyline}
-          className="min-h-[320px] flex-1"
+          className="h-56 sm:h-72 lg:flex-1 lg:min-h-[320px]"
         />
-        {!isHistory ? (
-          <div className="grid grid-cols-3 gap-2 pt-1">
-            <Stat label="ETA" value={tracking.etaMinutes != null ? `${tracking.etaMinutes} min` : "—"} />
+        {!isHistory && (tracking.etaMinutes != null || tracking.etaDistanceRemainingKm != null) ? (
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            <Stat
+              label="ETA"
+              value={tracking.etaMinutes != null ? `${tracking.etaMinutes} min` : "—"}
+            />
             <Stat
               label="Distance left"
               value={
@@ -180,10 +185,6 @@ function MapCard({ trip }: { trip: PortalTripDetail }) {
                   : "—"
               }
             />
-            <Stat
-              label="Updated"
-              value={tracking.lastUpdatedAt ? formatDateTime(tracking.lastUpdatedAt) : "—"}
-            />
           </div>
         ) : null}
       </CardContent>
@@ -191,10 +192,10 @@ function MapCard({ trip }: { trip: PortalTripDetail }) {
   );
 }
 
-// ─── Route (col-span-3) ─────────────────────────────────────────────────────
-function RouteCard({ trip }: { trip: PortalTripDetail }) {
+// ─── Route ──────────────────────────────────────────────────────────────────
+function RouteCard({ trip, className }: { trip: PortalTripDetail; className?: string }) {
   return (
-    <Card className="lg:col-span-3">
+    <Card className={className}>
       <CardContent className="p-3">
         <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-gray-700">
           <MapPin className="size-3.5 text-gray-500" />
@@ -203,31 +204,39 @@ function RouteCard({ trip }: { trip: PortalTripDetail }) {
         <div className="flex items-start gap-2.5">
           <div className="mt-1 flex flex-col items-center">
             <span className="size-2.5 rounded-full bg-emerald-500 ring-2 ring-emerald-100" />
-            <span className="my-0.5 h-8 w-px bg-gray-200" />
+            <span className="my-0.5 h-7 w-px bg-gray-200" />
             <span className="size-2.5 rounded-full bg-red-500 ring-2 ring-red-100" />
           </div>
           <div className="min-w-0 flex-1 space-y-2">
-            <div>
-              <p className="text-[10px] font-medium uppercase text-gray-400">Pickup</p>
-              <p className="text-xs font-medium text-gray-900">
+            <div className="min-w-0">
+              <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">
+                Pickup
+              </p>
+              <p className="text-sm font-medium text-gray-900 sm:text-xs">
                 {[trip.pickup.city, trip.pickup.state].filter(Boolean).join(", ") || "—"}
               </p>
               {trip.pickup.address ? (
-                <p className="text-[11px] leading-snug text-gray-500">{trip.pickup.address}</p>
+                <p className="text-[11px] leading-snug text-gray-500 break-words">
+                  {trip.pickup.address}
+                </p>
               ) : null}
             </div>
-            <div>
-              <p className="text-[10px] font-medium uppercase text-gray-400">Delivery</p>
-              <p className="text-xs font-medium text-gray-900">
+            <div className="min-w-0">
+              <p className="text-[10px] font-medium uppercase tracking-wide text-gray-400">
+                Delivery
+              </p>
+              <p className="text-sm font-medium text-gray-900 sm:text-xs">
                 {[trip.delivery.city, trip.delivery.state].filter(Boolean).join(", ") || "—"}
               </p>
               {trip.delivery.address ? (
-                <p className="text-[11px] leading-snug text-gray-500">{trip.delivery.address}</p>
+                <p className="text-[11px] leading-snug text-gray-500 break-words">
+                  {trip.delivery.address}
+                </p>
               ) : null}
             </div>
           </div>
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-2 border-t border-gray-100 pt-2 text-xs">
+        <div className="mt-3 grid grid-cols-2 gap-2 border-t border-gray-100 pt-2">
           <Chip label="Schedule" value={formatDate(trip.consignmentDate)} />
           <Chip
             label="Duration"
@@ -243,12 +252,12 @@ function RouteCard({ trip }: { trip: PortalTripDetail }) {
   );
 }
 
-// ─── Documents (col-span-3) ─────────────────────────────────────────────────
-function DocumentsCard({ trip }: { trip: PortalTripDetail }) {
+// ─── Documents ──────────────────────────────────────────────────────────────
+function DocumentsCard({ trip, className }: { trip: PortalTripDetail; className?: string }) {
   const items = collectDocs(trip);
 
   return (
-    <Card className="lg:col-span-3">
+    <Card className={className}>
       <CardContent className="p-3">
         <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-gray-700">
           <FileText className="size-3.5 text-gray-500" />
@@ -266,16 +275,22 @@ function DocumentsCard({ trip }: { trip: PortalTripDetail }) {
                 key={item.key}
                 className="flex items-center justify-between gap-2 rounded-md border border-gray-100 bg-gray-50/60 px-2.5 py-2"
               >
-                <div className="min-w-0">
-                  <p className="text-xs font-medium text-gray-900">{item.label}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-medium text-gray-900">{item.label}</p>
                   <p className="truncate text-[10px] text-muted-foreground">
                     {item.hint ?? formatDate(item.uploadedAt)}
                   </p>
                 </div>
                 {item.objectKey ? (
-                  <SignedDocPreview tripId={trip.tripId} objectKey={item.objectKey} label={item.label} />
+                  <SignedDocPreview
+                    tripId={trip.tripId}
+                    objectKey={item.objectKey}
+                    label={item.label}
+                  />
                 ) : (
-                  <span className="text-[10px] text-muted-foreground">{item.note ?? "Pending"}</span>
+                  <span className="shrink-0 text-[10px] text-muted-foreground">
+                    {item.note ?? "Pending"}
+                  </span>
                 )}
               </li>
             ))}
@@ -286,12 +301,18 @@ function DocumentsCard({ trip }: { trip: PortalTripDetail }) {
   );
 }
 
-// ─── Cargo & Vehicle (col-span-3) ───────────────────────────────────────────
-function CargoVehicleCard({ trip }: { trip: PortalTripDetail }) {
+// ─── Cargo & Vehicle ────────────────────────────────────────────────────────
+function CargoVehicleCard({
+  trip,
+  className,
+}: {
+  trip: PortalTripDetail;
+  className?: string;
+}) {
   const { cargo, vehicle } = trip;
 
   return (
-    <Card className="lg:col-span-3">
+    <Card className={className}>
       <CardContent className="p-3">
         <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-gray-700">
           <Package className="size-3.5 text-gray-500" />
@@ -314,19 +335,19 @@ function CargoVehicleCard({ trip }: { trip: PortalTripDetail }) {
           {cargo.type ? <Chip label="Type" value={prettify(cargo.type) ?? "—"} /> : null}
         </div>
         {(vehicle.make || vehicle.model || vehicle.bodyType) && (
-          <p className="mt-2 border-t border-gray-100 pt-2 text-[11px] text-gray-600">
+          <p className="mt-2 border-t border-gray-100 pt-2 text-[11px] text-gray-600 break-words">
             <span className="text-gray-400">Vehicle · </span>
             {[vehicle.make, vehicle.model, vehicle.bodyType].filter(Boolean).join(" · ")}
           </p>
         )}
         {cargo.description ? (
-          <p className="mt-1 text-[11px] text-gray-600">
+          <p className="mt-1 text-[11px] text-gray-600 break-words">
             <span className="text-gray-400">Description · </span>
             {cargo.description}
           </p>
         ) : null}
         {cargo.specialInstructions ? (
-          <p className="mt-1 text-[11px] text-gray-600">
+          <p className="mt-1 text-[11px] text-gray-600 break-words">
             <span className="text-gray-400">Instructions · </span>
             {cargo.specialInstructions}
           </p>
@@ -365,13 +386,13 @@ const STATUS_ORDER: Record<TripStatus, number> = {
   driver_rejected: -1,
 };
 
-function TimelineCard({ trip }: { trip: PortalTripDetail }) {
+function TimelineCard({ trip, className }: { trip: PortalTripDetail; className?: string }) {
   const t = trip.timeline;
 
   if (t.cancelledAt || t.driverRejectedAt) {
     const cancelled = !!t.cancelledAt;
     return (
-      <Card className="lg:col-span-9">
+      <Card className={className}>
         <CardContent className="p-3">
           <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-gray-700">
             <Clock className="size-3.5 text-gray-500" />
@@ -398,7 +419,7 @@ function TimelineCard({ trip }: { trip: PortalTripDetail }) {
   const currentIndex = STATUS_ORDER[trip.status] ?? 0;
 
   return (
-    <Card className="lg:col-span-9">
+    <Card className={className}>
       <CardContent className="p-3">
         <div className="mb-3 flex items-center gap-1.5 text-xs font-semibold text-gray-700">
           <Clock className="size-3.5 text-gray-500" />

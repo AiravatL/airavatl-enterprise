@@ -1,15 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Loader2, RefreshCw, Search, Truck, History } from "lucide-react";
+import { ChevronRight, Loader2, RefreshCw, Search, Truck, History, X } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { listTrips, type PortalTripRow, type TripScope } from "@/lib/api/portal-trips";
+import { listTrips, type PortalTripRow, type TripScope, type TripStatus } from "@/lib/api/portal-trips";
 import { formatCurrency, formatDate, formatRoute } from "@/lib/format";
+import { tripStatusLabel } from "@/lib/format/trip-status";
 import { TripStatusBadge } from "@/components/trips/trip-status-badge";
+import { cn } from "@/lib/utils";
 
 interface Props {
   scope: TripScope;
@@ -25,23 +27,99 @@ const REFETCH_INTERVAL_MS: Record<TripScope, number | false> = {
   all: 60_000,
 };
 
+const DATE_RANGES = [
+  { value: "all", label: "All time", days: null },
+  { value: "7", label: "7 days", days: 7 },
+  { value: "30", label: "30 days", days: 30 },
+  { value: "90", label: "90 days", days: 90 },
+] as const;
+
+type DateRangeValue = (typeof DATE_RANGES)[number]["value"];
+
 export function TripsTable({ scope, emptyTitle, emptyDescription }: Props) {
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<Set<TripStatus>>(new Set());
+  const [dateRange, setDateRange] = useState<DateRangeValue>("all");
 
   const query = useQuery({
-    queryKey: ["portal-trips", scope, search] as const,
-    queryFn: () => listTrips({ scope, search: search.trim() || undefined, limit: 100 }),
-    // Background refresh — initial load shows the spinner, subsequent refetches
-    // swap data in place without disrupting the user.
+    queryKey: ["portal-trips", scope] as const,
+    queryFn: () => listTrips({ scope, limit: 100 }),
     refetchInterval: REFETCH_INTERVAL_MS[scope],
-    refetchIntervalInBackground: false, // pause when tab is hidden
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
     refetchOnReconnect: true,
-    placeholderData: (prev) => prev, // keep previous results while a refetch is in flight
+    placeholderData: (prev) => prev,
   });
 
-  const items = query.data?.items ?? [];
+  const allItems = query.data?.items ?? [];
   const isBackgroundRefreshing = query.isFetching && !query.isLoading;
+
+  // Show only the statuses that actually appear in the data — keeps the
+  // chip row scope-aware without hardcoding which statuses go where.
+  const statusOptions = useMemo(() => {
+    const seen = new Set<TripStatus>();
+    for (const t of allItems) seen.add(t.status);
+    return Array.from(seen).sort();
+  }, [allItems]);
+
+  const items = useMemo(() => {
+    let filtered = allItems;
+
+    const q = search.trim().toLowerCase();
+    if (q) {
+      filtered = filtered.filter((t) =>
+        [
+          t.tripNumber,
+          t.requestNumber,
+          t.pickupCity,
+          t.deliveryCity,
+          t.pickupState,
+          t.deliveryState,
+          t.vehicleType,
+        ]
+          .filter((v): v is string => Boolean(v))
+          .some((v) => v.toLowerCase().includes(q)),
+      );
+    }
+
+    if (statusFilter.size > 0) {
+      filtered = filtered.filter((t) => statusFilter.has(t.status));
+    }
+
+    const range = DATE_RANGES.find((r) => r.value === dateRange);
+    if (range?.days != null) {
+      const cutoff = Date.now() - range.days * 24 * 60 * 60 * 1000;
+      filtered = filtered.filter((t) => {
+        const dateStr =
+          scope === "history"
+            ? (t.deliveryCompletedAt ?? t.cancelledAt ?? t.updatedAt)
+            : (t.consignmentDate ?? t.createdAt);
+        if (!dateStr) return false;
+        const ms = new Date(dateStr).getTime();
+        return Number.isFinite(ms) && ms >= cutoff;
+      });
+    }
+
+    return filtered;
+  }, [allItems, search, statusFilter, dateRange, scope]);
+
+  const hasFilters =
+    search.trim() !== "" || statusFilter.size > 0 || dateRange !== "all";
+
+  const toggleStatus = (s: TripStatus) => {
+    setStatusFilter((prev) => {
+      const next = new Set(prev);
+      if (next.has(s)) next.delete(s);
+      else next.add(s);
+      return next;
+    });
+  };
+
+  const clearFilters = () => {
+    setSearch("");
+    setStatusFilter(new Set());
+    setDateRange("all");
+  };
 
   return (
     <div className="space-y-3">
@@ -51,11 +129,21 @@ export function TripsTable({ scope, emptyTitle, emptyDescription }: Props) {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by trip number or city"
-            className="pl-9"
+            placeholder="Search trip #, city, or vehicle"
+            className="pl-9 pr-9"
             inputMode="search"
             autoCapitalize="none"
           />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+            >
+              <X className="size-3.5" />
+            </button>
+          )}
         </div>
         <RefreshIndicator
           isRefreshing={isBackgroundRefreshing}
@@ -63,6 +151,45 @@ export function TripsTable({ scope, emptyTitle, emptyDescription }: Props) {
           disabled={query.isFetching}
         />
       </div>
+
+      {(statusOptions.length > 1 || hasFilters) && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {statusOptions.map((s) => {
+            const active = statusFilter.has(s);
+            return (
+              <FilterChip
+                key={s}
+                label={tripStatusLabel(s)}
+                active={active}
+                onClick={() => toggleStatus(s)}
+              />
+            );
+          })}
+
+          {statusOptions.length > 0 && (
+            <span aria-hidden className="mx-1 h-4 w-px bg-gray-200" />
+          )}
+
+          {DATE_RANGES.map((r) => (
+            <FilterChip
+              key={r.value}
+              label={r.label}
+              active={dateRange === r.value}
+              onClick={() => setDateRange(r.value)}
+            />
+          ))}
+
+          {hasFilters && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="ml-auto inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] text-muted-foreground hover:bg-gray-100 hover:text-gray-900"
+            >
+              <X className="size-3" /> Clear filters
+            </button>
+          )}
+        </div>
+      )}
 
       {query.isLoading ? (
         <Card>
@@ -77,7 +204,11 @@ export function TripsTable({ scope, emptyTitle, emptyDescription }: Props) {
           </CardContent>
         </Card>
       ) : items.length === 0 ? (
-        <EmptyState scope={scope} title={emptyTitle} description={emptyDescription} />
+        hasFilters ? (
+          <NoMatchState onClear={clearFilters} />
+        ) : (
+          <EmptyState scope={scope} title={emptyTitle} description={emptyDescription} />
+        )
       ) : (
         <>
           <DesktopTable items={items} scope={scope} />
@@ -85,12 +216,39 @@ export function TripsTable({ scope, emptyTitle, emptyDescription }: Props) {
         </>
       )}
 
-      {query.data && items.length > 0 ? (
+      {query.data && allItems.length > 0 ? (
         <p className="text-[11px] text-muted-foreground text-right">
-          Showing {items.length} of {query.data.total}
+          {hasFilters
+            ? `Showing ${items.length} of ${allItems.length} loaded`
+            : `Showing ${items.length} of ${query.data.total}`}
         </p>
       ) : null}
     </div>
+  );
+}
+
+function FilterChip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+        active
+          ? "border-primary bg-primary/10 text-primary"
+          : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50",
+      )}
+    >
+      {label}
+    </button>
   );
 }
 
@@ -223,6 +381,29 @@ function MobileList({ items, scope }: { items: PortalTripRow[]; scope: TripScope
         </Link>
       ))}
     </div>
+  );
+}
+
+function NoMatchState({ onClear }: { onClear: () => void }) {
+  return (
+    <Card>
+      <CardContent className="flex flex-col items-center justify-center py-14 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-500">
+          <Search className="size-5" />
+        </div>
+        <h2 className="mt-4 text-base font-semibold text-gray-900">No trips match</h2>
+        <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+          Try a different search or clear the filters.
+        </p>
+        <button
+          type="button"
+          onClick={onClear}
+          className="mt-4 inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+        >
+          <X className="size-3.5" /> Clear filters
+        </button>
+      </CardContent>
+    </Card>
   );
 }
 
