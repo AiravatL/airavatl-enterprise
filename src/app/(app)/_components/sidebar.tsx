@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Truck, History, Wallet, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, Truck, History, Wallet, ClipboardList, type LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -14,6 +14,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { label: "Trip Requests", href: "/requests", icon: ClipboardList },
   { label: "Active Trips", href: "/active-trips", icon: Truck },
   { label: "Trip History", href: "/trip-history", icon: History },
   { label: "Payments", href: "/payments", icon: Wallet },
