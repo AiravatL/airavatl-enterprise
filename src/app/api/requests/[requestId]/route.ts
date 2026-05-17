@@ -80,3 +80,48 @@ export async function GET(
 
   return NextResponse.json({ ok: true, data: normalizeDetail(row) });
 }
+
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ requestId: string }> },
+) {
+  const actorResult = await requirePortalActor();
+  if ("error" in actorResult) return actorResult.error;
+
+  const { requestId } = await params;
+  if (!requestId) {
+    return NextResponse.json({ ok: false, message: "requestId is required" }, { status: 400 });
+  }
+
+  const { error } = await actorResult.supabase.rpc(
+    "portal_trip_request_delete_v1",
+    { p_id: requestId } as never,
+  );
+
+  if (error) {
+    if (isMissingRpcError(error)) {
+      return NextResponse.json(
+        { ok: false, message: "Missing RPC: portal_trip_request_delete_v1" },
+        { status: 500 },
+      );
+    }
+    if (error.code === "42501") {
+      return NextResponse.json({ ok: false, message: "Forbidden" }, { status: 403 });
+    }
+    if (error.code === "P0002" || (error.message ?? "").includes("not_found")) {
+      return NextResponse.json({ ok: false, message: "Request not found" }, { status: 404 });
+    }
+    if ((error.message ?? "").includes("not_deletable")) {
+      return NextResponse.json(
+        { ok: false, message: "Approved requests can't be deleted — their linked auction preserves the audit trail" },
+        { status: 400 },
+      );
+    }
+    return NextResponse.json(
+      { ok: false, message: error.message ?? "Unable to delete request" },
+      { status: 500 },
+    );
+  }
+
+  return NextResponse.json({ ok: true, data: { id: requestId, deleted: true } });
+}

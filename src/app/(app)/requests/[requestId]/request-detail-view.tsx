@@ -9,9 +9,9 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import { getRequest, cancelRequest } from "@/lib/api/portal-requests";
+import { getRequest, cancelRequest, deleteRequest } from "@/lib/api/portal-requests";
 import type { PortalTripRequestDetail, TripRequestStatus } from "@/lib/api/portal-requests";
-import { ArrowLeft, Ban, Loader2 } from "lucide-react";
+import { ArrowLeft, Ban, Loader2, Trash2 } from "lucide-react";
 import { PageShell } from "../../_components/page-shell";
 
 const STATUS_COLORS: Record<TripRequestStatus, string> = {
@@ -50,6 +50,7 @@ export function RequestDetailView({ requestId }: { requestId: string }) {
   });
 
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [actionError, setActionError] = useState("");
 
@@ -63,6 +64,16 @@ export function RequestDetailView({ requestId }: { requestId: string }) {
     },
     onError: (err) =>
       setActionError(err instanceof Error ? err.message : "Failed to cancel"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteRequest(requestId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["portal-requests"] });
+      router.push("/requests");
+    },
+    onError: (err) =>
+      setActionError(err instanceof Error ? err.message : "Failed to delete"),
   });
 
   if (detailQuery.isLoading) {
@@ -86,6 +97,7 @@ export function RequestDetailView({ requestId }: { requestId: string }) {
 
   const req = detailQuery.data;
   const isPending = req.status === "pending_review";
+  const canDelete = req.status !== "converted";
 
   return (
     <PageShell
@@ -120,19 +132,59 @@ export function RequestDetailView({ requestId }: { requestId: string }) {
                 </p>
               )}
             </div>
-            {isPending && (
-              <Button
-                variant="outline"
-                onClick={() => { setCancelOpen(true); setReason(""); setActionError(""); }}
-              >
-                <Ban className="h-4 w-4 mr-1.5" /> Cancel Request
-              </Button>
-            )}
+            <div className="flex flex-wrap gap-2">
+              {isPending && (
+                <Button
+                  variant="outline"
+                  onClick={() => { setCancelOpen(true); setReason(""); setActionError(""); }}
+                >
+                  <Ban className="h-4 w-4 mr-1.5" /> Cancel Request
+                </Button>
+              )}
+              {canDelete && (
+                <Button
+                  variant="outline"
+                  onClick={() => { setDeleteOpen(true); setActionError(""); }}
+                  className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                >
+                  <Trash2 className="h-4 w-4 mr-1.5" /> Delete
+                </Button>
+              )}
+            </div>
           </div>
         </Card>
 
         <DetailCard req={req} />
       </div>
+
+      <Dialog open={deleteOpen} onOpenChange={(open) => { setDeleteOpen(open); if (!open) setActionError(""); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Permanently delete this request?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 text-sm text-gray-700">
+            <p>
+              Request <span className="font-medium">{req.requestNumber}</span> will be removed
+              completely. This cannot be undone.
+            </p>
+            <p className="text-xs text-gray-500">
+              Approved requests can&apos;t be deleted — their linked auction preserves the record.
+            </p>
+            {actionError && <p className="text-sm text-red-600">{actionError}</p>}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setDeleteOpen(false)}>Keep</Button>
+            <Button
+              onClick={() => { setActionError(""); deleteMutation.mutate(); }}
+              disabled={deleteMutation.isPending}
+              className="bg-red-600 text-white hover:bg-red-700"
+            >
+              {deleteMutation.isPending ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : null}
+              Delete permanently
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={cancelOpen} onOpenChange={(open) => { setCancelOpen(open); if (!open) setActionError(""); }}>
         <DialogContent>

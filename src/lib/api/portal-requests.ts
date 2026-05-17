@@ -116,3 +116,10 @@ export async function cancelRequest(id: string, reason?: string): Promise<void> 
     },
   );
 }
+
+export async function deleteRequest(id: string): Promise<void> {
+  await apiRequest<{ id: string; deleted: true }>(
+    `/api/requests/${id}`,
+    { method: "DELETE" },
+  );
+}
