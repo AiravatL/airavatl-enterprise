@@ -154,26 +154,28 @@ function PaymentSection() {
   const { ops, tripId, onDone, setError } = useTripOpsContext();
   const showAdvance = ops.status === "waiting_for_advance";
   const showFinal = ops.status === "waiting_for_final";
-  const advancePaid = ops.payments
-    .filter((p) => p.type === "advance" && p.status === "completed")
+  // Advance counts toward what's recorded whether it's settled or deferred.
+  const advanceRecorded = ops.payments
+    .filter((p) => p.type === "advance" && (p.status === "completed" || p.status === "pending"))
     .reduce((s, p) => s + p.amount, 0);
-  const finalDue = Math.max((ops.driverBidAmount ?? 0) - advancePaid, 0);
+  const finalDue = Math.max((ops.driverBidAmount ?? 0) - advanceRecorded, 0);
 
   const [advanceAmount, setAdvanceAmount] = useState("");
   const [reference, setReference] = useState("");
-  const [notes, setNotes] = useState("");
 
   const mutation = useMutation({
-    mutationFn: (type: "advance" | "final") =>
+    mutationFn: (v: { type: "advance" | "final"; defer: boolean }) =>
       recordTripPayment(tripId, {
-        paymentType: type,
-        amount: type === "advance" ? Number(advanceAmount) : undefined,
+        paymentType: v.type,
+        amount: v.type === "advance" ? Number(advanceAmount) : undefined,
         reference: reference.trim() || undefined,
-        notes: notes.trim() || undefined,
+        defer: v.defer,
       }),
-    onSuccess: () => { setAdvanceAmount(""); setReference(""); setNotes(""); onDone(); },
+    onSuccess: () => { setAdvanceAmount(""); setReference(""); onDone(); },
     onError: (e) => setError(e instanceof Error ? e.message : "Couldn't record payment"),
   });
+
+  const advanceInvalid = !advanceAmount || Number(advanceAmount) <= 0;
 
   return (
     <Section icon={<Wallet className="size-3.5" />} title="Driver payments">
@@ -184,7 +186,9 @@ function PaymentSection() {
               <span className="capitalize text-gray-700">{p.type}{p.reference ? ` · ${p.reference}` : ""}</span>
               <span className="font-semibold text-gray-900">
                 {formatCurrency(p.amount)}
-                <span className="ml-1.5 text-[10px] font-normal text-emerald-600">{p.status}</span>
+                <span className={`ml-1.5 text-[10px] font-normal ${p.status === "pending" ? "text-amber-600" : "text-emerald-600"}`}>
+                  {p.status === "pending" ? "pay later" : "paid"}
+                </span>
               </span>
             </div>
           ))}
@@ -193,7 +197,7 @@ function PaymentSection() {
 
       {showAdvance && (
         <div className="rounded-md border border-gray-200 p-2.5 space-y-2">
-          <p className="text-xs font-medium text-gray-900">Record advance paid to driver</p>
+          <p className="text-xs font-medium text-gray-900">Advance to driver</p>
           <p className="text-[11px] text-muted-foreground">
             Driver&apos;s amount: <span className="font-medium">{formatCurrency(ops.driverBidAmount)}</span>. You pay them directly.
           </p>
@@ -201,29 +205,35 @@ function PaymentSection() {
             onChange={(e) => setAdvanceAmount(e.target.value.replace(/[^\d.]/g, "").slice(0, 9))} />
           <Input placeholder="Reference / UTR (optional)" value={reference} maxLength={120}
             onChange={(e) => setReference(e.target.value)} />
-          <Button size="sm" className="w-full"
-            disabled={mutation.isPending || !advanceAmount || Number(advanceAmount) <= 0}
-            onClick={() => { setError(""); mutation.mutate("advance"); }}>
-            {mutation.isPending ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Wallet className="size-4 mr-1.5" />}
-            Record advance &amp; start delivery
-          </Button>
+          <PayButtons
+            disabled={mutation.isPending || advanceInvalid}
+            pending={mutation.isPending}
+            onPayNow={() => { setError(""); mutation.mutate({ type: "advance", defer: false }); }}
+            onPayLater={() => { setError(""); mutation.mutate({ type: "advance", defer: true }); }}
+          />
+          <p className="text-[10px] text-muted-foreground">
+            Either option starts the delivery. &ldquo;Pay later&rdquo; is tracked on the Payments page.
+          </p>
         </div>
       )}
 
       {showFinal && (
         <div className="rounded-md border border-gray-200 p-2.5 space-y-2">
-          <p className="text-xs font-medium text-gray-900">Record final payment to driver</p>
+          <p className="text-xs font-medium text-gray-900">Final payment to driver</p>
           <p className="text-[11px] text-muted-foreground">
             Remaining due: <span className="font-semibold text-gray-900">{formatCurrency(finalDue)}</span>
           </p>
           <Input placeholder="Reference / UTR (optional)" value={reference} maxLength={120}
             onChange={(e) => setReference(e.target.value)} />
-          <Button size="sm" className="w-full"
+          <PayButtons
             disabled={mutation.isPending || finalDue <= 0}
-            onClick={() => { setError(""); mutation.mutate("final"); }}>
-            {mutation.isPending ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <CheckCircle2 className="size-4 mr-1.5" />}
-            Record final &amp; complete trip
-          </Button>
+            pending={mutation.isPending}
+            onPayNow={() => { setError(""); mutation.mutate({ type: "final", defer: false }); }}
+            onPayLater={() => { setError(""); mutation.mutate({ type: "final", defer: true }); }}
+          />
+          <p className="text-[10px] text-muted-foreground">
+            Either option completes the trip. &ldquo;Pay later&rdquo; is tracked on the Payments page.
+          </p>
         </div>
       )}
 
@@ -233,6 +243,22 @@ function PaymentSection() {
         </p>
       )}
     </Section>
+  );
+}
+
+function PayButtons({ disabled, pending, onPayNow, onPayLater }: {
+  disabled: boolean; pending: boolean; onPayNow: () => void; onPayLater: () => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      <Button size="sm" disabled={disabled} onClick={onPayNow}>
+        {pending ? <Loader2 className="size-4 mr-1.5 animate-spin" /> : <Wallet className="size-4 mr-1.5" />}
+        Pay now
+      </Button>
+      <Button size="sm" variant="outline" disabled={disabled} onClick={onPayLater}>
+        <Clock4 className="size-4 mr-1.5" /> Pay later
+      </Button>
+    </div>
   );
 }
 

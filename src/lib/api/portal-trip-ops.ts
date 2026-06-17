@@ -76,6 +76,9 @@ export interface RecordPaymentInput {
   amount?: number;
   reference?: string;
   notes?: string;
+  // Pay later — record the payment as pending (deferred) but still advance the
+  // trip so the flow proceeds. It then shows on the Payments page until settled.
+  defer?: boolean;
 }
 
 export async function recordTripPayment(

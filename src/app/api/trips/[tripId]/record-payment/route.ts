@@ -12,6 +12,7 @@ const bodySchema = z.object({
   reference: z.string().trim().max(120).optional(),
   notes: z.string().trim().max(500).optional(),
   proofObjectKey: z.string().trim().max(500).optional(),
+  defer: z.boolean().optional(),
 });
 
 const MESSAGES: Record<string, string> = {
@@ -49,6 +50,7 @@ export async function POST(
     p_payment_reference: parsed.data.reference ?? null,
     p_notes: parsed.data.notes ?? null,
     p_proof_object_key: parsed.data.proofObjectKey ?? null,
+    p_defer: parsed.data.defer ?? false,
   } as never);
 
   if (error) {

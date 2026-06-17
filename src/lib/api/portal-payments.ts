@@ -1,71 +1,68 @@
 import { apiRequest } from "@/lib/api/http";
 
-export type ReceivableStatus =
-  | "pending"
-  | "partial"
-  | "collected"
-  | "overdue"
-  | "written_off";
+// Enterprise payments = deferred ("pay later") driver payments the consigner
+// still owes. Pay-now payments are settled immediately and don't appear here.
 
-export interface PortalReceivable {
+export interface PendingPayment {
   id: string;
-  tripId: string | null;
-  tripNumber: string | null;
-  invoiceAmount: number;
-  amountReceived: number;
-  amountOutstanding: number;
-  holdingAmount: number;
-  status: ReceivableStatus;
-  dueDate: string | null;
+  tripId: string;
+  tripNumber: string;
+  type: "advance" | "final" | "refund" | "penalty";
+  amount: number;
+  bidAmount: number;
+  reference: string | null;
   notes: string | null;
   createdAt: string;
-  updatedAt: string;
   pickupCity: string | null;
-  pickupState: string | null;
   deliveryCity: string | null;
-  deliveryState: string | null;
-  deliveryCompletedAt: string | null;
 }
 
-export interface PortalReceivableListResponse {
+export interface PendingPaymentsResponse {
   total: number;
+  totalAmount: number;
   limit: number;
   offset: number;
-  items: PortalReceivable[];
+  items: PendingPayment[];
 }
 
-export interface PortalPaymentsSummary {
-  totalOutstanding: number;
-  totalOverdue: number;
-  totalPaid: number;
-  totalInvoiced: number;
-  countOutstanding: number;
-  countOverdue: number;
-}
-
-export interface ListPaymentsParams {
-  status?: ReceivableStatus;
+export interface ListPendingPaymentsParams {
   limit?: number;
   offset?: number;
 }
 
-export async function listPayments(
-  params: ListPaymentsParams = {},
-): Promise<PortalReceivableListResponse> {
-  const search = new URLSearchParams();
-  if (params.status) search.set("status", params.status);
-  if (params.limit != null) search.set("limit", String(params.limit));
-  if (params.offset != null) search.set("offset", String(params.offset));
-  const qs = search.toString();
-  return apiRequest<PortalReceivableListResponse>(
-    `/api/payments${qs ? `?${qs}` : ""}`,
-    { method: "GET", cache: "no-store" },
-  );
-}
-
-export async function getPaymentsSummary(): Promise<PortalPaymentsSummary> {
-  return apiRequest<PortalPaymentsSummary>("/api/payments/summary", {
+export async function listPendingPayments(
+  params: ListPendingPaymentsParams = {},
+): Promise<PendingPaymentsResponse> {
+  const sp = new URLSearchParams();
+  if (params.limit != null) sp.set("limit", String(params.limit));
+  if (params.offset != null) sp.set("offset", String(params.offset));
+  const qs = sp.toString();
+  return apiRequest<PendingPaymentsResponse>(`/api/payments${qs ? `?${qs}` : ""}`, {
     method: "GET",
     cache: "no-store",
+  });
+}
+
+export async function settlePayment(
+  paymentId: string,
+  input: { reference?: string; notes?: string } = {},
+): Promise<void> {
+  await apiRequest(`/api/payments/${paymentId}/settle`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+// Settle ALL pending payments for one trip at once. Optionally adjust the
+// advance amount (the final is recomputed = bid − advance when both pending).
+export async function settleTripPayments(
+  tripId: string,
+  input: { advanceAmount?: number; reference?: string; notes?: string } = {},
+): Promise<void> {
+  await apiRequest(`/api/payments/trips/${tripId}/settle`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
   });
 }
