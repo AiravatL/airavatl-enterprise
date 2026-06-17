@@ -24,6 +24,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { PortalAccount } from "@/lib/api/portal-account";
+import { InstallPrompt } from "@/components/pwa/install-prompt";
 
 import { Sidebar } from "./sidebar";
 
@@ -38,6 +39,7 @@ export function AppShell({ account: serverAccount, children }: AppShellProps) {
 
   return (
     <div className="flex h-screen flex-col bg-gray-50">
+      <InstallPrompt />
       <TopBar
         account={serverAccount}
         onOpenMobile={() => setMobileOpen(true)}

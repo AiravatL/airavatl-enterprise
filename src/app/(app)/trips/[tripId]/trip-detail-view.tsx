@@ -24,6 +24,7 @@ import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import { tripStatusLabel } from "@/lib/format/trip-status";
 import { cn } from "@/lib/utils";
 import { PageShell } from "../../_components/page-shell";
+import { EnterpriseTripOps } from "./enterprise-trip-ops";
 
 const HISTORY_STATUSES: TripStatus[] = ["completed", "cancelled", "driver_rejected"];
 const ACTIVE_REFETCH_MS = 20_000;
@@ -114,6 +115,9 @@ export function TripDetailView({ tripId }: Props) {
           </span>
         </div>
       </div>
+
+      {/* Operational panel — renders only for the consigner's own enterprise trips. */}
+      <EnterpriseTripOps tripId={tripId} />
 
       {/* Single 12-col grid. Mobile order: Map → Route → Timeline → Cargo & Vehicle → Documents.
           Desktop order via lg:order-N: Map(1) Route(2) Documents(3) Cargo&Vehicle(4) Timeline(5). */}
