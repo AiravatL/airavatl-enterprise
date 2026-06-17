@@ -28,6 +28,10 @@ export async function POST(request: Request) {
   if (!tripId) {
     return NextResponse.json({ ok: false, message: "tripId is required" }, { status: 400 });
   }
+  // Bound inputs (the values are also allowlisted against the trip's docs below).
+  if (objectKey.length > 512 || tripId.length > 64) {
+    return NextResponse.json({ ok: false, message: "Invalid request" }, { status: 400 });
+  }
 
   // Verify the requested object actually belongs to a trip the caller can see.
   // portal_trip_detail_v1 already gates by customer_id; if it returns the trip,
