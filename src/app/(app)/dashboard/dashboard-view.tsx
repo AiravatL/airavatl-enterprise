@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Activity, Truck, Gavel, ArrowRight, ArrowDownUp } from "lucide-react";
+import { Activity, Truck, Gavel, ArrowRight, ArrowDownUp, Map, Circle, Square } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -57,6 +57,8 @@ export function DashboardView({ firstName }: Props) {
   const [pickup, setPickup] = useState<PlaceDetails | null>(null);
   const [delivery, setDelivery] = useState<PlaceDetails | null>(null);
   const bothSet = pickup !== null && delivery !== null;
+  const pickupInputRef = useRef<HTMLInputElement>(null);
+  const deliveryInputRef = useRef<HTMLInputElement>(null);
 
   const startAuction = () => {
     setDraftLocations({ pickup, delivery });
@@ -92,44 +94,98 @@ export function DashboardView({ firstName }: Props) {
     <PageShell
       title={`Welcome${firstName ? `, ${firstName}` : ""}`}
       description="Where are we picking up and dropping off?"
+      hideHeaderOnMobile
     >
       {/* Location-first hero — pick pickup & drop, then start the auction */}
-      <Card className="overflow-hidden">
-        <CardContent className="p-4 space-y-3">
-          <LocationPicker label="Pickup location" required value={pickup}
-            sessionToken={sessionToken} onSelect={setPickup} onClear={() => setPickup(null)} />
-          <div className="flex justify-center">
+      <div className="rounded-2xl bg-white p-4 shadow-sm sm:border sm:border-gray-100">
+        <div className="relative flex gap-2">
+          {/* Inputs column with a connector linking the two pins */}
+          <div className="relative flex-1 space-y-2">
+            <span
+              aria-hidden
+              className="pointer-events-none absolute left-[20px] top-[22px] bottom-[22px] w-px bg-gray-300"
+            />
+            <LocationPicker
+              label="Pickup location"
+              variant="booking"
+              placeholder="Pickup location"
+              leadingIcon={<Circle className="h-[18px] w-[18px]" />}
+              inputRef={pickupInputRef}
+              required
+              value={pickup}
+              sessionToken={sessionToken}
+              onSelect={setPickup}
+              onClear={() => setPickup(null)}
+            />
+            <LocationPicker
+              label="Drop-off location"
+              variant="booking"
+              placeholder="Drop-off location"
+              leadingIcon={<Square className="h-[18px] w-[18px] fill-primary" />}
+              inputRef={deliveryInputRef}
+              required
+              value={delivery}
+              sessionToken={sessionToken}
+              onSelect={setDelivery}
+              onClear={() => setDelivery(null)}
+            />
+          </div>
+
+          {/* Map-pick buttons (focus the matching field for now) */}
+          <div className="flex flex-col gap-2">
             <button
               type="button"
-              onClick={() => { const p = pickup; setPickup(delivery); setDelivery(p); }}
-              disabled={!pickup && !delivery}
-              className="rounded-full border border-gray-200 bg-white p-2 text-gray-500 shadow-sm hover:bg-gray-50 disabled:opacity-40"
-              title="Swap pickup & drop"
+              onClick={() => pickupInputRef.current?.focus()}
+              aria-label="Pick pickup on map"
+              title="Pick on map"
+              className="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-primary hover:bg-gray-200"
             >
-              <ArrowDownUp className="h-4 w-4" />
+              <Map className="h-[18px] w-[18px]" />
+            </button>
+            <button
+              type="button"
+              onClick={() => deliveryInputRef.current?.focus()}
+              aria-label="Pick drop-off on map"
+              title="Pick on map"
+              className="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-primary hover:bg-gray-200"
+            >
+              <Map className="h-[18px] w-[18px]" />
             </button>
           </div>
-          <LocationPicker label="Drop location" required value={delivery}
-            sessionToken={sessionToken} onSelect={setDelivery} onClear={() => setDelivery(null)} />
 
-          {bothSet && (
-            <LiveTrackingMap
-              pickup={{ lat: pickup.latitude, lng: pickup.longitude }}
-              delivery={{ lat: delivery.latitude, lng: delivery.longitude }}
-              driver={{ lat: null, lng: null }}
-              routePolyline={null}
-              className="h-48 sm:h-56 mt-1"
-            />
-          )}
+          {/* Swap pickup & drop — sits on the seam between the two fields */}
+          <button
+            type="button"
+            onClick={() => { const p = pickup; setPickup(delivery); setDelivery(p); }}
+            disabled={!pickup && !delivery}
+            className="absolute right-14 top-1/2 z-20 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-gray-200 bg-white text-primary shadow-md hover:bg-gray-50 disabled:opacity-40"
+            title="Swap pickup & drop"
+          >
+            <ArrowDownUp className="h-4 w-4" />
+          </button>
+        </div>
 
-          <Button className="w-full h-11" disabled={!bothSet} onClick={startAuction}>
-            Next: Material details <ArrowRight className="h-4 w-4 ml-1.5" />
-          </Button>
-        </CardContent>
-      </Card>
+        {bothSet && (
+          <LiveTrackingMap
+            pickup={{ lat: pickup.latitude, lng: pickup.longitude }}
+            delivery={{ lat: delivery.latitude, lng: delivery.longitude }}
+            driver={{ lat: null, lng: null }}
+            routePolyline={null}
+            className="mt-3 h-48 sm:h-56"
+          />
+        )}
+      </div>
+
+      <Button
+        className="mt-4 h-12 w-full rounded-xl text-base font-semibold"
+        disabled={!bothSet}
+        onClick={startAuction}
+      >
+        Next: Material Details <ArrowRight className="ml-1.5 h-4 w-4" />
+      </Button>
 
       {/* Activity summary */}
-      <div className="mt-4 grid grid-cols-3 gap-3">
+      <div className="mt-4 hidden grid-cols-3 gap-3 sm:grid">
         <SummaryCard label="Live auctions"
           value={formatCount(liveAuctionsQuery.data?.total, liveAuctionsQuery.isLoading)}
           icon={<Gavel className="size-4 text-green-600" />} href="/auctions" />
@@ -141,7 +197,7 @@ export function DashboardView({ firstName }: Props) {
           icon={<Truck className="size-4 text-emerald-600" />} href="/trip-history" />
       </div>
 
-      <Card className="mt-4">
+      <Card className="mt-4 hidden sm:block">
         <CardContent className="p-0">
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
             <span className="text-sm font-medium text-gray-900">Recent auctions</span>

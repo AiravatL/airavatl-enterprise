@@ -6,6 +6,8 @@ interface PageShellProps {
   actions?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
+  /** Hide the title/description block on mobile (shown again at sm+). */
+  hideHeaderOnMobile?: boolean;
 }
 
 /**
@@ -19,10 +21,16 @@ export function PageShell({
   actions,
   children,
   className,
+  hideHeaderOnMobile,
 }: PageShellProps) {
   return (
     <div className={cn("w-full px-4 py-5 sm:px-6 sm:py-6", className)}>
-      <div className="mb-4 flex flex-col gap-2 sm:mb-5 sm:flex-row sm:items-end sm:justify-between">
+      <div
+        className={cn(
+          "mb-4 flex-col gap-2 sm:mb-5 sm:flex-row sm:items-end sm:justify-between",
+          hideHeaderOnMobile ? "hidden sm:flex" : "flex",
+        )}
+      >
         <div className="min-w-0">
           <h1 className="text-xl font-semibold tracking-tight text-gray-900 sm:text-[22px]">
             {title}

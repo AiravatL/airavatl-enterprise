@@ -15,6 +15,18 @@ interface LocationPickerProps {
   sessionToken: string;
   onSelect: (place: PlaceDetails) => void;
   onClear: () => void;
+  /**
+   * "default" (forms) renders a labelled search box. "booking" renders the
+   * compact, label-less pill used by the dashboard hero (leading pin icon,
+   * gray fill, custom placeholder).
+   */
+  variant?: "default" | "booking";
+  /** Placeholder override (booking variant). */
+  placeholder?: string;
+  /** Leading icon for the booking variant (defaults to a pin). */
+  leadingIcon?: React.ReactNode;
+  /** Forwarded to the search input so callers can focus it (booking variant). */
+  inputRef?: React.Ref<HTMLInputElement>;
 }
 
 const MIN_SEARCH_CHARS = 5;
@@ -27,7 +39,9 @@ function normalizeSearchQuery(input: string) {
 
 export function LocationPicker({
   label, required, value, sessionToken, onSelect, onClear,
+  variant = "default", placeholder, leadingIcon, inputRef,
 }: LocationPickerProps) {
+  const isBooking = variant === "booking";
   const [query, setQuery] = useState("");
   const [predictions, setPredictions] = useState<PlacePrediction[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -111,6 +125,34 @@ export function LocationPicker({
     setShowDropdown(false);
   };
 
+  if (value && isBooking) {
+    return (
+      <div className="relative flex items-center gap-2 rounded-xl bg-gray-100 px-3 py-2.5">
+        <span className="shrink-0 text-primary">
+          {leadingIcon ?? <MapPin className="h-[18px] w-[18px]" />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-gray-900">
+            {value.primaryText || value.formattedAddress}
+          </p>
+          {(value.secondaryText || value.city) && (
+            <p className="truncate text-xs text-gray-500">
+              {value.secondaryText || `${value.city}${value.state ? `, ${value.state}` : ""}`}
+            </p>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={handleClear}
+          aria-label={`Clear ${label.toLowerCase()}`}
+          className="shrink-0 rounded-full p-1 text-gray-400 hover:bg-gray-200 hover:text-gray-600"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    );
+  }
+
   if (value) {
     return (
       <div className="space-y-1.5">
@@ -142,6 +184,60 @@ export function LocationPicker({
             </button>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  if (isBooking) {
+    return (
+      <div className="relative" ref={containerRef}>
+        <div className="flex items-center gap-2 rounded-xl bg-gray-100 px-3 py-2.5 focus-within:ring-2 focus-within:ring-primary/30">
+          <span className="shrink-0 text-primary">
+            {leadingIcon ?? <MapPin className="h-[18px] w-[18px]" />}
+          </span>
+          <input
+            ref={inputRef}
+            placeholder={placeholder ?? label}
+            value={query}
+            aria-label={label}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              if (normalizeSearchQuery(e.target.value).length < MIN_SEARCH_CHARS) {
+                setPredictions([]);
+                setShowDropdown(false);
+              }
+            }}
+            onFocus={() => predictions.length > 0 && setShowDropdown(true)}
+            className="min-w-0 flex-1 bg-transparent text-base text-gray-900 outline-none placeholder:text-gray-400 md:text-sm"
+            maxLength={120}
+            autoComplete="off"
+            spellCheck={false}
+          />
+          {(isSearching || isResolving) && (
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-gray-400" />
+          )}
+        </div>
+
+        {showDropdown && predictions.length > 0 && (
+          <div className="absolute z-30 mt-1 w-full overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg">
+            <div className="max-h-56 overflow-y-auto">
+              {predictions.map((pred) => (
+                <button
+                  key={pred.placeId}
+                  type="button"
+                  className="flex w-full items-start gap-2 px-3 py-2 text-left hover:bg-gray-50"
+                  onClick={() => handleSelectPrediction(pred)}
+                >
+                  <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm text-gray-900">{pred.primaryText}</p>
+                    <p className="truncate text-xs text-gray-500">{pred.secondaryText}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   }

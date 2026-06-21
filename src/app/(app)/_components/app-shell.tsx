@@ -27,6 +27,7 @@ import type { PortalAccount } from "@/lib/api/portal-account";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 
 import { Sidebar } from "./sidebar";
+import { BottomNav } from "./bottom-nav";
 
 interface AppShellProps {
   account: PortalAccount;
@@ -36,6 +37,9 @@ interface AppShellProps {
 export function AppShell({ account: serverAccount, children }: AppShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const { account: liveAccount, logout } = useAuth();
+  const account = liveAccount ?? serverAccount;
+  const initials = getInitials(account.fullName);
 
   return (
     <div className="flex h-screen flex-col bg-gray-50">
@@ -65,26 +69,55 @@ export function AppShell({ account: serverAccount, children }: AppShellProps) {
               className="fixed inset-0 bg-black/40"
               onClick={() => setMobileOpen(false)}
             />
-            <div className="fixed inset-y-0 left-0 top-14 z-[1110] w-64">
+            <div className="fixed inset-y-0 left-0 top-14 z-[1110] w-72">
               <div className="flex h-full flex-col bg-white">
-                <div className="flex h-10 items-center justify-end px-2">
+                {/* Profile header — moved here from the top bar on mobile */}
+                <div className="flex items-center gap-3 border-b border-gray-100 px-3 py-3">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-violet-100 to-violet-200 text-xs font-semibold text-violet-800 ring-1 ring-violet-200">
+                    {initials ?? <UserRound className="size-4" />}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-gray-900">
+                      {account.fullName}
+                    </p>
+                    <p className="truncate text-xs text-gray-500">{account.email}</p>
+                  </div>
                   <button
                     type="button"
                     onClick={() => setMobileOpen(false)}
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100"
+                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100"
                     aria-label="Close menu"
                   >
                     <X className="size-4" />
                   </button>
                 </div>
-                <Sidebar onNavigate={() => setMobileOpen(false)} />
+
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                  <Sidebar onNavigate={() => setMobileOpen(false)} />
+                </div>
+
+                <div className="border-t border-gray-100 p-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMobileOpen(false);
+                      void logout();
+                    }}
+                    className="flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+                  >
+                    <LogOut className="size-4" />
+                    Sign out
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         ) : null}
 
-        <main className="flex-1 overflow-y-auto">{children}</main>
+        <main className="flex-1 overflow-y-auto pb-24 lg:pb-0">{children}</main>
       </div>
+
+      <BottomNav />
     </div>
   );
 }
@@ -108,30 +141,20 @@ function TopBar({
 
   return (
     <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-gray-200 bg-white px-3 sm:px-4">
-      <button
-        type="button"
-        onClick={onOpenMobile}
-        className="inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 lg:hidden"
-        aria-label="Open menu"
-      >
-        <Menu className="size-5" />
-      </button>
-
       <Link
         href="/dashboard"
         className="flex items-center gap-2"
         aria-label="AiravatL home"
       >
-        <Image
-          src="/airavat-logo.svg"
-          alt=""
-          width={28}
-          height={28}
-          className="size-7 shrink-0 object-contain"
-          priority
-        />
-        <span className="text-sm font-semibold tracking-tight text-gray-900 sm:text-[15px]">
-          AiravatL
+        <span className="flex h-10 items-center overflow-hidden">
+          <Image
+            src="/airavat-logo.svg"
+            alt="AiravatL"
+            width={120}
+            height={120}
+            className="h-28 w-auto shrink-0 object-contain"
+            priority
+          />
         </span>
       </Link>
 
@@ -151,14 +174,14 @@ function TopBar({
 
       <div className="flex-1" />
 
-      <p className="hidden truncate text-xs text-muted-foreground sm:block">
+      <p className="hidden truncate text-xs text-muted-foreground lg:block">
         {account.customerName}
       </p>
 
       <DropdownMenu>
         <DropdownMenuTrigger
           aria-label="Open profile menu"
-          className="group ml-2 flex items-center gap-2 rounded-full border border-gray-200 bg-white py-1 pl-1 pr-2.5 text-gray-700 transition-colors hover:border-gray-300 hover:bg-gray-50 data-[state=open]:border-gray-300 data-[state=open]:bg-gray-50 sm:pr-3"
+          className="group ml-2 hidden items-center gap-2 rounded-full border border-gray-200 bg-white py-1 pl-1 pr-2.5 text-gray-700 transition-colors hover:border-gray-300 hover:bg-gray-50 data-[state=open]:border-gray-300 data-[state=open]:bg-gray-50 sm:pr-3 lg:flex"
         >
           <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-violet-100 to-violet-200 text-[11px] font-semibold text-violet-800 ring-1 ring-violet-200">
             {initials ?? <UserRound className="size-3.5" />}
@@ -192,6 +215,15 @@ function TopBar({
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <button
+        type="button"
+        onClick={onOpenMobile}
+        className="ml-1 inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100 lg:hidden"
+        aria-label="Open menu"
+      >
+        <Menu className="size-5" />
+      </button>
     </header>
   );
 }
