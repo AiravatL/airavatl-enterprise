@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Home,
-  ClipboardList,
+  Gavel,
   Truck,
   LogOut,
   UserRound,
@@ -32,7 +32,7 @@ interface Tab {
 
 const TABS: Tab[] = [
   { label: "Home", href: "/dashboard", icon: Home },
-  { label: "Requests", href: "/requests", icon: ClipboardList, match: ["/auctions"] },
+  { label: "Auctions", href: "/auctions", icon: Gavel, match: ["/requests"] },
   {
     label: "Trips",
     href: "/active-trips",
